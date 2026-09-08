@@ -251,6 +251,7 @@
 #     __PITURNEND__ absolute path to .pi/extensions/fm-primary-turnend-guard.ts in a pi secondmate home
 #     __PIWATCH__   absolute path to .pi/extensions/fm-primary-pi-watch.ts in a pi secondmate home
 #     __OMPBIN__   quoted concrete omp executable path resolved from PATH
+#     __POOLSIDEBIN__  quoted concrete pool executable path resolved from PATH
 #     __OMPEXT__   absolute path to state/<task-id>.omp-ext.ts (omp busy-state and
 #                  turn-end extension, written by this script; outside the worktree so
 #                  omp's cwd-only auto-discovery cannot load it a second time)
@@ -1324,7 +1325,7 @@ if [ "$RELAUNCH" -eq 1 ]; then
   }
 elif [ "$KIND" = secondmate ]; then
   case "${POS[1]:-}" in
-    ''|claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|gemini|muse|rovo|omp)
+    ''|claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|gemini|muse|rovo|omp|poolside)
       ARG3=${POS[1]:-}
       ;;
     *' '*)
@@ -1582,6 +1583,18 @@ launch_template() {
     # when a supported effort is requested, since a second --config-override
     # would silently discard the first (confirmed live).
     rovo) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS __ROVOBIN__ run --yolo __MODELFLAG____ROVOCONFIGOVERRIDE__' ;;
+    # poolside (Poolside pool CLI): an ACP (Agent Client Protocol) client that
+    # runs on the Herdr backend. `pool acp` starts an ACP server that the Herdr
+    # backend drives; the brief is delivered over the ACP protocol (not as a
+    # positional), so the template carries no __BRIEF__ placeholder - the
+    # Herdr backend sends it after the server is live. Foreign primary markers
+    # are cleared so an inherited CLAUDECODE/PI_CODING_AGENT/etc cannot cause a
+    # spawned pool worker to misread firstmate's identity. The pool CLI reads
+    # ~/.config/poolside/settings.yaml for model/mode; --model overrides per
+    # launch. No effort flag is supported by the pool CLI. poolside is
+    # herdr-backed, so its busy-state and turn-end contracts come from the
+    # herdr.sh backend adapter, not from hooks planted in the worktree.
+    poolside) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u GEMINI_CLI -u CURSOR_AGENT -u CURSOR_INVOKED_AS FM_POOLSIDE_HARNESS=poolside __POOLSIDEBIN__ acp __MODELFLAG__' ;;
     *) return 1 ;;
   esac
 }
@@ -1684,6 +1697,12 @@ case "$HARNESS" in
     OMP_WORKER_CFG="$FM_ROOT/.omp/fm-worker-overlay.yml"
     [ -f "$OMP_WORKER_CFG" ] || {
       echo "error: omp worker posture overlay missing at $OMP_WORKER_CFG; a worker launched without it can park on the captain's own approval or plan-mode settings" >&2
+      exit 1
+    }
+    ;;
+  poolside)
+    POOLSIDE_BIN=$(resolve_pi_executable pool) || {
+      echo "error: pool executable not found on PATH; install the Poolside pool CLI or select a different verified harness" >&2
       exit 1
     }
     ;;
@@ -1834,7 +1853,7 @@ model_flag_for_harness() {
   local harness=$1 model=$2
   [ -n "$model" ] && [ "$model" != default ] || return 0
   case "$harness" in
-    claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|gemini|muse|rovo|omp)
+    claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|gemini|muse|rovo|omp|poolside)
       printf -- '--model %s ' "$(shell_quote "$model")"
       ;;
   esac
@@ -1908,7 +1927,8 @@ effort_flag_for_harness() {
     # kimi likewise has no reasoning-effort flag; the requested axis stays in
     # task metadata but never reaches the launch command. Cursor encodes effort
     # in model ids such as cursor-grok-4.5-high, so it also receives no separate
-    # effort flag.
+    # effort flag. poolside's pool CLI exposes no effort knob either, so the
+    # shared effort axis stays in task metadata only.
   esac
 }
 
@@ -3187,7 +3207,7 @@ if [ "$KIND" != secondmate ]; then
       ;;
   esac
   case "$HARNESS" in
-    claude*|opencode*|pi|pi-signed|omp)
+    claude*|opencode*|pi|pi-signed|omp|poolside)
       BUSY_GEN=$("$FM_ROOT/bin/fm-busy-event.sh" arm "$STATE_REAL" "$ID") || {
         echo "error: failed to arm the busy-state contract for $ID" >&2
         exit 1
@@ -3773,6 +3793,7 @@ case "$HARNESS" in
   cursor) LAUNCH=${LAUNCH//__CURSORBIN__/"$(shell_quote "$CURSOR_BIN")"} ;;
   gemini) LAUNCH=${LAUNCH//__GEMINISETTINGS__/"$(shell_quote "$STATE_REAL/$ID.gemini-settings.json")"} ;;
   omp) LAUNCH=${LAUNCH//__OMPBIN__/"$(shell_quote "$OMP_BIN")"} ;;
+  poolside) LAUNCH=${LAUNCH//__POOLSIDEBIN__/"$(shell_quote "$POOLSIDE_BIN")"} ;;
 esac
 LAUNCH=${LAUNCH//__WORKTREE__/$sq_worktree}
 case "$HARNESS" in
