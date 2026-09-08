@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Detect the agent harness this process tree runs on.
-# Usage: fm-harness.sh                  print own harness: claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|gemini|muse|rovo|omp|unknown
+# Usage: fm-harness.sh                  print own harness: claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|gemini|muse|rovo|omp|poolside|unknown
 #        fm-harness.sh crew             print the effective CREWMATE harness
 #                                        (config/crew-harness; "default" resolves to own)
 #        fm-harness.sh secondmate       print the harness the PRIMARY uses to launch
@@ -167,6 +167,14 @@ detect_own() {
       # named `claude` with its own node child, and that fallback's *claude*
       # args glob would otherwise claim it if that subtree were ever walked.
       omp) echo omp; return ;;
+      # poolside (the `pool` CLI, v1.0.16+) is the Poolside ACP harness running
+      # on the herdr backend. It publishes no harness-identity env marker of
+      # its own (only HERDR_* vars from the backend), so detection is by the
+      # anchored process name `pool` in the ancestry walk. Verified live: the
+      # process comm is exactly `pool` from both the main process and the
+      # `pool acp` child. Anchored, never *pool*, so pull, spool, and similar
+      # unrelated commands are not misread as this harness.
+      pool) echo poolside; return ;;
       node*|python*)
         # Bare interpreter: match the harness name in its script path.
         args=$(ps -o args= -p "$pid" 2>/dev/null)
