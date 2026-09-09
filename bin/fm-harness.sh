@@ -95,6 +95,15 @@ detect_own() {
     echo omp
     return
   fi
+  # FM_POOLSIDE_HARNESS is a firstmate-owned launch marker: pool publishes no
+  # identity env var of its own (only HERDR_* vars from the backend), so this
+  # marker is the precedence override that beats an inherited CLAUDECODE only
+  # when a `pool` process is genuinely in the ancestry. A leaked marker
+  # without pool ancestry is inert, the same contract as FM_OMP_HARNESS above.
+  if [ "${FM_POOLSIDE_HARNESS:-}" = poolside ] && ancestry_names_pool; then
+    echo poolside
+    return
+  fi
   [ "${CLAUDECODE:-}" = "1" ] && { echo claude; return; }
   if [ "${PI_CODING_AGENT:-}" = "true" ]; then
     if [ "${FM_PI_HARNESS:-}" = pi-signed ]; then echo pi-signed; else echo pi; fi
@@ -206,6 +215,20 @@ ancestry_names_omp() {
   for _ in 1 2 3 4 5 6 7 8; do
     comm=$(ps -o comm= -p "$pid" 2>/dev/null) || return 1
     [ "$(basename -- "$comm")" = omp ] && return 0
+    pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    [ -n "$pid" ] && [ "$pid" -gt 1 ] || return 1
+  done
+  return 1
+}
+
+# True when an exact `pool` process sits within eight parents of this one. The
+# same anchored match as the ancestry walk in detect_own, kept separate so the
+# FM_POOLSIDE_HARNESS marker precedence above can demand real process evidence.
+ancestry_names_pool() {
+  local pid=$$ comm
+  for _ in 1 2 3 4 5 6 7 8; do
+    comm=$(ps -o comm= -p "$pid" 2>/dev/null) || return 1
+    [ "$(basename -- "$comm")" = pool ] && return 0
     pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
     [ -n "$pid" ] && [ "$pid" -gt 1 ] || return 1
   done

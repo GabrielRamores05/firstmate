@@ -483,10 +483,18 @@ do_exit() {
   # authoritative proof is the agent-state wait below. The retried Enter still
   # matters, because a slash command opens a completion popup on some TUIs that
   # swallows the first Enter.
-  verdict=$(fm_backend_send_text_submit "$BACKEND" "$T" "$cmd" "$EXIT_RETRIES" "$POLL" 1.2 "$LABEL") \
-    || die "the exit command could not be sent to task $ID on $BACKEND"
-  [ "$verdict" != send-failed ] \
-    || die "the exit command could not be sent to task $ID on $BACKEND"
+  # poolside exits via a terminal key (Ctrl-C), not a text command: deliver it
+  # through fm_backend_send_key so the backend adapter emits a keystroke rather
+  # than typing the literal characters.
+  if [ "$HARNESS" = poolside ]; then
+    fm_backend_send_key "$BACKEND" "$T" "$cmd" "$LABEL" \
+      || die "the exit command could not be sent to task $ID on $BACKEND"
+  else
+    verdict=$(fm_backend_send_text_submit "$BACKEND" "$T" "$cmd" "$EXIT_RETRIES" "$POLL" 1.2 "$LABEL") \
+      || die "the exit command could not be sent to task $ID on $BACKEND"
+    [ "$verdict" != send-failed ] \
+      || die "the exit command could not be sent to task $ID on $BACKEND"
+  fi
   state=$(wait_agent_state "$EXIT_WAIT" dead) || {
     die "exit-delivered $ID interrupt=$interrupt_result exit-command=delivered agent-state=$state exit=unconfirmed; the agent did not stop within ${EXIT_WAIT}s"
   }

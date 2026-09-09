@@ -1584,17 +1584,18 @@ launch_template() {
     # would silently discard the first (confirmed live).
     rovo) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS __ROVOBIN__ run --yolo __MODELFLAG____ROVOCONFIGOVERRIDE__' ;;
     # poolside (Poolside pool CLI): an ACP (Agent Client Protocol) client that
-    # runs on the Herdr backend. `pool acp` starts an ACP server that the Herdr
-    # backend drives; the brief is delivered over the ACP protocol (not as a
-    # positional), so the template carries no __BRIEF__ placeholder - the
-    # Herdr backend sends it after the server is live. Foreign primary markers
-    # are cleared so an inherited CLAUDECODE/PI_CODING_AGENT/etc cannot cause a
-    # spawned pool worker to misread firstmate's identity. The pool CLI reads
-    # ~/.config/poolside/settings.yaml for model/mode; --model overrides per
-    # launch. No effort flag is supported by the pool CLI. poolside is
-    # herdr-backed, so its busy-state and turn-end contracts come from the
-    # herdr.sh backend adapter, not from hooks planted in the worktree.
-    poolside) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u GEMINI_CLI -u CURSOR_AGENT -u CURSOR_INVOKED_AS FM_POOLSIDE_HARNESS=poolside __POOLSIDEBIN__ acp __MODELFLAG__' ;;
+    # runs on the Herdr backend. `pool acp` starts an ACP server over stdio; the
+    # pool CLI forwards arguments after `--` to the agent server. The brief is
+    # encoded via __OPINPUT__ (the canonical launch-brief envelope) and passed
+    # after `--` so the agent server receives task context. Foreign primary
+    # markers are cleared so an inherited CLAUDECODE/PI_CODING_AGENT/etc cannot
+    # cause a spawned pool worker to misread firstmate's identity. The model is
+    # read from ~/.config/poolside/settings.yaml (pool acp has no --model flag);
+    # __MODELFLAG__ resolves to empty for poolside. No effort flag is supported
+    # by the pool CLI; poolside is herdr-backed, so its busy-state and turn-end
+    # contracts come from the herdr.sh backend adapter, not from hooks planted
+    # in the worktree.
+    poolside) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u GEMINI_CLI -u CURSOR_AGENT -u CURSOR_INVOKED_AS FM_POOLSIDE_HARNESS=poolside __POOLSIDEBIN__ acp -- "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
     *) return 1 ;;
   esac
 }
@@ -1853,8 +1854,12 @@ model_flag_for_harness() {
   local harness=$1 model=$2
   [ -n "$model" ] && [ "$model" != default ] || return 0
   case "$harness" in
-    claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|gemini|muse|rovo|omp|poolside)
+    claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|gemini|muse|rovo|omp)
       printf -- '--model %s ' "$(shell_quote "$model")"
+      ;;
+    poolside)
+      # pool acp has no --model flag; the model is read from
+      # ~/.config/poolside/settings.yaml, so the model flag stays in metadata only
       ;;
   esac
 }
