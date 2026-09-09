@@ -783,6 +783,20 @@ if [ "$PRIMARY_HARNESS" = omp ]; then
     printf 'OMP_WATCH_EXTENSION: not loaded - restart omp with this home as its working directory so %s and %s auto-load from .omp/extensions/ for turn-end guard and background wake coverage; pass -e %s -e %s only when omp must start from another directory, never together with auto-discovery (omp loads a file named both ways twice)\n' "$OMP_TURNEND_EXT" "$OMP_EXT" "$OMP_TURNEND_EXT" "$OMP_EXT"
   fi
 fi
+# poolside (Poolside pool CLI) runs as an ACP server under Herdr. Unlike omp/pi,
+# it has no in-worktree extensions to verify; the wake mechanism is Herdr's
+# native push-event layer. The POOLSIDE_WATCH line confirms the Herdr socket
+# identity and pane binding are present so the Herdr-backed ACP wake path is
+# armed. When the socket is absent or the pane identity cannot be resolved,
+# the session is not poolside-under-Herdr and the ordinary tmux poll path is
+# the fallback.
+if [ "$PRIMARY_HARNESS" = poolside ]; then
+  if [ -n "$HERDR_SOCKET_PATH" ] && [ -S "$HERDR_SOCKET_PATH" ] && [ -n "$HERDR_PANE_ID" ]; then
+    printf 'POOLSIDE_WATCH: loaded\n'
+  else
+    printf 'POOLSIDE_WATCH: not loaded - Herdr socket absent or pane identity cannot be resolved; restart this session under Herdr with a pool session so the Herdr-backed ACP wake mechanism is armed\n'
+  fi
+fi
 "$SCRIPT_DIR/fm-supervision-instructions.sh" \
   --harness "$PRIMARY_HARNESS" \
   --read-only "$READ_ONLY" \
